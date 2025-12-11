@@ -9,7 +9,16 @@
             --bg-color: #050505;
             --accent: #4af;
         }
-        body { margin: 0; overflow: hidden; background: var(--bg-color); font-family: 'Courier New', Courier, monospace; color: white; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: var(--bg-color); 
+            font-family: 'Courier New', Courier, monospace; 
+            color: white; 
+            /* Added transition for the Easter Egg fade-out */
+            transition: opacity 0.8s ease-in-out; 
+            opacity: 1;
+        }
         
         /* UI Overlay */
         #ui {
@@ -387,6 +396,31 @@
             targetMorph = Math.max(0, Math.min(1, targetMorph));
         });
 
+        // --- EASTER EGG: REDIRECT (Feature Added) ---
+        let keyBuffer = "";
+        const easterEggTrigger = "bb";
+
+        window.addEventListener("keydown", (e) => {
+            // Avoid triggering if Ctrl/Alt/Meta keys are held (to avoid conflicting with shortcuts)
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+            keyBuffer += e.key.toLowerCase();
+            
+            // Keep buffer buffer short (only track last 2 keys)
+            if (keyBuffer.length > 2) keyBuffer = keyBuffer.slice(-2);
+            
+            if (keyBuffer === easterEggTrigger) {
+                // Fade out effect
+                document.body.style.opacity = "0";
+                
+                // Wait for fade then redirect to the hidden file
+                setTimeout(() => {
+                    // Make sure your hidden page file is named 'forever.html'
+                    window.location.href = "forever.html";
+                }, 800);
+            }
+        });
+
         // --- ANIMATION LOOP ---
         const clock = new THREE.Clock();
 
@@ -413,10 +447,6 @@
             renderer.render(scene, camera);
         }
 
-        // --- INIT DEFAULT IMAGE ---
-        // (Optional: Load a placeholder noise or text)
-        // For now we just wait for upload.
-        
         // Handle Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
