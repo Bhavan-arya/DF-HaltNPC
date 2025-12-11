@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DF • Diamonds for Forever</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --accent: #4af;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: var(--bg-color);
+            font-family: 'Courier New', monospace;
+            color: white;
+        }
+
+        /* UI Layout */
+        #ui {
+            position: absolute;
+            top: 50%;
+            left: 80px;
+            transform: translateY(-50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 300;
+            letter-spacing: 2px;
+            font-size: 5rem;
+            text-transform: uppercase;
+            line-height: 0.9;
+        }
+
+        h2 {
+            margin: 0;
+            font-weight: 300;
+            font-size: 0.9rem;
+            opacity: 0.5;
+            letter-spacing: 6px;
+            margin-bottom: 30px;
+            margin-left: 5px;
+        }
+
+        p {
+            opacity: 0.6;
+            font-size: 0.85rem;
+            max-width: 300px;
+            line-height: 1.6;
+            margin-left: 5px;
+        }
+
+        /* Glass Button */
+        .upload-btn {
+            pointer-events: auto;
+            display: inline-flex;
+            align-items: center;
+            margin-top: 40px;
+            margin-left: 5px;
+            padding: 14px 32px;
+            border: 1px solid var(--glass-border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .upload-btn:hover {
+            background: white;
+            color: black;
+            border-color: white;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        /* Footer */
+        .footer {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            /* Align badge vertically */
+            padding: 0 40px;
+            box-sizing: border-box;
+            pointer-events: none;
+            opacity: 0.9;
+            /* Increased opacity slightly so badge pops */
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .footer-left {
+            opacity: 0.5;
+        }
+
+        /* --- NEW GLASS BADGE STYLE --- */
+        .glass-badge {
+            display: inline-block;
+            color: #fff;
+            padding: 8px 24px;
+            border-radius: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            /* Matched to previous footer size */
+        }
+
+        /* Loader */
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--accent);
+            display: none;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            animation: blink 1s infinite;
+            z-index: 20;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0.3;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="ui">
+        <h1>DF</h1>
+        <h2>Diamonds for Forever</h2>
+        <p>A digital archive morphing pixels into structural art. <br>Upload to crystallize your memories.</p>
+
+        <label class="upload-btn">
+            Initialize Upload
+            <input type="file" id="fileInput" accept="image/*">
+        </label>
+    </div>
+
+    <div id="loader">PROCESSING DATA...</div>
+
+    <div class="footer">
+        <div class="footer-left">Scroll to Morph • Drag to Rotate • Hover to Disrupt</div>
+        <div class="glass-badge">Made by BAT</div>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- CONFIG & STATE ---
+        const CONFIG = { density: 100, size: 7.0, chars: " .:-=+*#%@" };
+        // Default image
+        const DEFAULT_URL = "https://media.discordapp.net/attachments/1148874040740687972/1448493768532693084/IMG_20251210_195602550.jpg?ex=693b7672&is=693a24f2&hm=ec1b5f6cd1ac5295722c5fa1a4037d7374c4dad3078e5ed2428b69eb8e0c6011&=&format=webp&width=583&height=778";
+
+        let particles, geometry, material;
+        let isUserImage = false;
+        let targetMorph = 0;
+        let currentMorph = 0;
+        let introTime = 0;
+
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.002);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 160);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.enableZoom = false;
+
+        // --- TEXTURE GEN ---
+        const createAsciiTexture = () => {
+            const c = document.createElement('canvas');
+            const s = 64, cols = CONFIG.chars.length;
+            c.width = s * cols; c.height = s;
+            const ctx = c.getContext('2d');
+            ctx.font = `bold ${s * 0.75}px monospace`;
+            ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#fff";
+            for (let i = 0; i < cols; i++) ctx.fillText(CONFIG.chars[i], i * s + s / 2, s / 2);
+            return new THREE.CanvasTexture(c);
+        };
+
+        // --- SHADERS ---
+        const vertexShader = `
+            uniform float uTime; uniform float uMorph; uniform float uSize; uniform vec3 uMouse;
+            attribute vec3 aPosGlobe; attribute vec3 aPosPlane; attribute float aChar; attribute vec3 aColor;
+            varying float vChar; varying vec3 vColor;
+            
+            // Simple noise
+            float noise(vec3 p) { return sin(p.x*10.0+uTime) * sin(p.y*10.0+uTime) * 0.1; }
+
+            void main() {
+                vChar = aChar; vColor = aColor;
+                
+                // Mix positions
+                vec3 pos = mix(aPosGlobe, aPosPlane, uMorph);
+                
+                // Add breathing motion
+                pos += noise(pos * 0.02);
+                
+                // Mouse Interaction (Disrupt)
+                float dist = distance(pos.xy, uMouse.xy);
+                if(dist < 30.0 && uMorph > 0.8) {
+                    pos += normalize(pos - vec3(uMouse.xy, 0.0)) * (30.0 - dist) * 0.5;
+                }
+
+                vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+                gl_PointSize = uSize * (300.0 / -mv.z);
+                gl_Position = projectionMatrix * mv;
+            }`;
+
+        const fragmentShader = `
+            uniform sampler2D uTex; uniform float uCount;
+            varying float vChar; varying vec3 vColor;
+            void main() {
+                vec2 uv = gl_PointCoord;
+                // Sprite sheet mapping
+                float u = uv.x / uCount + (vChar / uCount);
+                vec4 color = texture2D(uTex, vec2(u, uv.y));
+                if (color.a < 0.5) discard;
+                gl_FragColor = vec4(vColor, 1.0) * color;
+            }`;
+
+        // --- CORE LOGIC ---
+        function initParticles(data, w, h) {
+            if (particles) scene.remove(particles);
+            const count = w * h;
+            const posGlobe = new Float32Array(count * 3), posPlane = new Float32Array(count * 3);
+            const colors = new Float32Array(count * 3), chars = new Float32Array(count);
+
+            for (let i = 0; i < count; i++) {
+                // Plane Mapping (Flat Image)
+                const x = (i % w) - w / 2;
+                const y = -(Math.floor(i / w) - h / 2);
+                posPlane[i * 3] = x; posPlane[i * 3 + 1] = y; posPlane[i * 3 + 2] = 0;
+
+                // Globe Mapping (Sphere)
+                const phi = Math.acos(-1 + (2 * i) / count);
+                const theta = Math.sqrt(count * Math.PI) * phi;
+                const r = w * 0.45;
+                posGlobe[i * 3] = r * Math.cos(theta) * Math.sin(phi);
+                posGlobe[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
+                posGlobe[i * 3 + 2] = r * Math.cos(phi);
+
+                // Color Data
+                const rV = data[i * 4] / 255, gV = data[i * 4 + 1] / 255, bV = data[i * 4 + 2] / 255;
+                colors[i * 3] = rV; colors[i * 3 + 1] = gV; colors[i * 3 + 2] = bV;
+                chars[i] = Math.floor(((rV + gV + bV) / 3) * (CONFIG.chars.length - 1));
+            }
+
+            geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(posPlane, 3));
+            geometry.setAttribute('aPosGlobe', new THREE.BufferAttribute(posGlobe, 3));
+            geometry.setAttribute('aPosPlane', new THREE.BufferAttribute(posPlane, 3));
+            geometry.setAttribute('aChar', new THREE.BufferAttribute(chars, 1));
+            geometry.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+
+            material = new THREE.ShaderMaterial({
+                vertexShader, fragmentShader,
+                uniforms: {
+                    uTime: { value: 0 }, uMorph: { value: 0 }, uSize: { value: CONFIG.size },
+                    uTex: { value: createAsciiTexture() }, uCount: { value: CONFIG.chars.length },
+                    uMouse: { value: new THREE.Vector3(9999, 9999, 0) }
+                },
+                transparent: true, depthTest: false
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            // Position logic: Right side if intro, Center if user
+            if (!isUserImage) {
+                particles.position.set(50, 0, 0); // Offset to right
+            } else {
+                particles.position.set(0, 0, 0); // Center
+            }
+        }
+
+        // --- LOAD IMAGE HELPER ---
+        const loadImage = (src, isUser = false) => {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+                const c = document.createElement('canvas');
+                // Calculate Aspect Ratio to fit density
+                const ar = img.width / img.height;
+                const w = CONFIG.density;
+                const h = Math.round(CONFIG.density / ar);
+
+                c.width = w; c.height = h;
+                c.getContext('2d').drawImage(img, 0, 0, w, h);
+
+                isUserImage = isUser;
+                initParticles(c.getContext('2d').getImageData(0, 0, w, h).data, w, h);
+                document.getElementById('loader').style.display = 'none';
+
+                if (isUser) targetMorph = 1; // Instant morph for user
+            };
+            img.src = src;
+        };
+
+        // --- EVENTS ---
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                document.getElementById('loader').style.display = 'block';
+                const reader = new FileReader();
+                reader.onload = (evt) => loadImage(evt.target.result, true);
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        // Mouse Raycaster
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersect = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, intersect);
+            if (material) {
+                // Adjust mouse pos based on particle container position
+                const localMouse = intersect.clone().sub(particles ? particles.position : new THREE.Vector3());
+                material.uniforms.uMouse.value.copy(localMouse);
+            }
+        });
+
+        window.addEventListener('wheel', (e) => {
+            if (isUserImage) {
+                targetMorph += e.deltaY * 0.001;
+                targetMorph = Math.max(0, Math.min(1, targetMorph));
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- INIT DEFAULT ---
+        loadImage(DEFAULT_URL, false);
+
+        // --- ANIMATION LOOP ---
+        const animate = () => {
+            requestAnimationFrame(animate);
+            const dt = 0.01;
+            const time = performance.now() * 0.001;
+
+            if (particles && material) {
+                material.uniforms.uTime.value = time;
+
+                if (!isUserImage) {
+                    // --- AUTO LOOP ANIMATION (Home Screen) ---
+                    introTime += dt;
+
+                    // Cycle: 2s Globe, 1s Transition, 2s Flat, 1s Transition = 6s Total
+                    const cycle = 6.0;
+                    const t = introTime % cycle;
+
+                    if (t < 2.0) {
+                        // Phase 1: Globe (Spinning)
+                        targetMorph = 0;
+                        particles.rotation.y += 0.01;
+                    } else if (t < 3.0) {
+                        // Phase 2: Morph to Plane
+                        // Normalize t from 2.0-3.0 to 0.0-1.0
+                        const p = (t - 2.0);
+                        // Smoothstep easing
+                        targetMorph = p * p * (3.0 - 2.0 * p);
+                        // Slow down rotation
+                        particles.rotation.y += (0.01 * (1.0 - p));
+                    } else if (t < 5.0) {
+                        // Phase 3: Flat Image (Static)
+                        targetMorph = 1;
+                        particles.rotation.y = 0;
+                    } else {
+                        // Phase 4: Morph back to Globe
+                        const p = (t - 5.0);
+                        targetMorph = 1.0 - (p * p * (3.0 - 2.0 * p));
+                    }
+
+                    // Apply morph directly for smoother code in loop
+                    currentMorph = targetMorph;
+
+                } else {
+                    // --- USER INTERACTION MODE ---
+                    // Standard lerp for user scrolling
+                    currentMorph += (targetMorph - currentMorph) * 0.05;
+
+                    // Minimal idle sway if globe
+                    if (currentMorph < 0.5) particles.rotation.y += 0.002;
+                    else particles.rotation.y = 0;
+                }
+
+                material.uniforms.uMorph.value = currentMorph;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        };
+        animate();
+    </script>
+</body>
+
+</html>
